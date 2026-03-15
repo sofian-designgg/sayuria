@@ -102,9 +102,12 @@ async function getAIResponse(userMessage, history = []) {
     },
   });
 
-  const text = response?.text?.();
-  if (!text || !text.trim()) return "Désolée, je n'ai pas pu répondre.";
-  return text.trim();
+  let text = typeof response?.text === 'function' ? response.text() : response?.text;
+  if (!text && response?.candidates?.[0]?.content?.parts?.length) {
+    text = response.candidates[0].content.parts.map((p) => p.text).filter(Boolean).join('\n');
+  }
+  if (!text || !String(text).trim()) return "Désolée, je n'ai pas pu répondre.";
+  return String(text).trim();
 }
 
 /** Génère une image via Gemini (Nano Banana) et retourne un Buffer ou null. */
