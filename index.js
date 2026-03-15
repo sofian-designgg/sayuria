@@ -1,6 +1,7 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, AttachmentBuilder } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 const db = require('./db');
 
 // Variables d'environnement
@@ -19,6 +20,28 @@ if (!DISCORD_TOKEN || !GEMINI_API_KEY) {
 }
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+const genAIImage = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+// Mots-clés pour déclencher la génération d'image
+const IMAGE_TRIGGERS = ['image', 'dessine', 'génère une image', 'genere une image', 'crée une image', 'cree une image', 'draw', 'img'];
+
+function wantsImage(text) {
+  const lower = text.toLowerCase().trim();
+  for (const trigger of IMAGE_TRIGGERS) {
+    if (lower === trigger || lower.startsWith(trigger + ' ') || lower.startsWith(trigger + ',')) return true;
+  }
+  return false;
+}
+
+function getImagePrompt(text) {
+  const lower = text.toLowerCase().trim();
+  for (const trigger of IMAGE_TRIGGERS) {
+    if (lower.startsWith(trigger + ' ')) return text.slice(trigger.length).trim();
+    if (lower.startsWith(trigger + ',')) return text.slice(trigger.length + 1).trim();
+    if (lower === trigger) return '';
+  }
+  return text;
+}
 
 const client = new Client({
   intents: [
@@ -76,6 +99,33 @@ async function getAIResponse(userMessage, history = []) {
   return response.text().trim();
 }
 
+/** Génère une image via Gemini (Nano Banana) et retourne un Buffer ou null. */
+async function generateImage(prompt) {
+  const imagePrompt = (prompt && prompt.trim()) || 'Une scène agréable et colorée.';
+  try {
+    const response = await genAIImage.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: imagePrompt,
+      config: {
+        responseModalities: ['TEXT', 'IMAGE'],
+      },
+    });
+    const candidates = response.candidates;
+    if (!candidates?.length) return null;
+    const parts = candidates[0].content?.parts;
+    if (!parts?.length) return null;
+    for (const part of parts) {
+      if (part.inlineData?.data) {
+        return Buffer.from(part.inlineData.data, 'base64');
+      }
+    }
+    return null;
+  } catch (err) {
+    console.error('Erreur génération image:', err.message);
+    return null;
+  }
+}
+
 client.once('ready', () => {
   console.log(`✅ Connecté en tant que ${client.user.tag}`);
   client.user.setActivity('Sayurio | Pose-moi une question !', { type: 4 }); // ActivityType.Custom
@@ -103,6 +153,22 @@ client.on('messageCreate', async (message) => {
   await message.channel.sendTyping();
 
   try {
+    // Génération d'image si la demande commence par image / dessine / etc.
+    if (wantsImage(userContent)) {
+      const imagePrompt = getImagePrompt(userContent);
+      const imageBuffer = await generateImage(imagePrompt);
+      if (imageBuffer && imageBuffer.length > 0) {
+        const attachment = new AttachmentBuilder(imageBuffer, { name: 'sayuri-image.png' });
+        await message.reply({
+          content: imagePrompt ? `Voici une image pour : *${imagePrompt.slice(0, 100)}${imagePrompt.length > 100 ? '…' : ''}*` : 'Voici une image pour toi.',
+          files: [attachment],
+        });
+      } else {
+        await message.reply("❌ Je n'ai pas pu générer l'image. Réessaie avec une autre description (ex. : `image un chat kawaii`).");
+      }
+      return;
+    }
+
     let history = await getHistoryForChannel(channelId);
     const reply = await getAIResponse(userContent, history);
 
