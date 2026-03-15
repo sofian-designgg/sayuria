@@ -1,0 +1,22 @@
+{
+  "name": "bot-sayuri-ia",
+  "version": "1.0.0",
+  "description": "Bot Discord avec IA pour le serveur Sayurio",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "keywords": ["discord", "bot", "ai", "gemini"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1",
+    "mongoose": "^8.0.3"
+  }
+}
