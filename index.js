@@ -1,6 +1,5 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, AttachmentBuilder } = require('discord.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { GoogleGenAI } = require('@google/genai');
 const db = require('./db');
 
@@ -19,8 +18,7 @@ if (!DISCORD_TOKEN || !GEMINI_API_KEY) {
   process.exit(1);
 }
 
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const genAIImage = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 // Mots-clés pour déclencher la génération d'image
 const IMAGE_TRIGGERS = ['image', 'dessine', 'génère une image', 'genere une image', 'crée une image', 'cree une image', 'draw', 'img'];
@@ -75,35 +73,45 @@ async function setHistoryForChannel(channelId, history) {
 function getSystemPrompt() {
   return `Tu es Sayuri, une assistante amicale et utile sur un serveur Discord nommé Sayurio.
 Tu réponds en français, de façon naturelle et concise.
-Tu peux être un peu fun et bienveillante. Évite les réponses trop longues (Discord a une limite de 2000 caractères).`;
+Tu peux être un peu fun et bienveillante. Évite les réponses trop longues (Discord a une limite de 2000 caractères).
+Tu as accès à la recherche Google : utilise-la pour la météo, l'actualité, les infos en temps réel, ou tout ce qui nécessite des données à jour. Ne dis jamais que tu ne peux pas chercher sur le web.`;
 }
 
+// Outil Google Search pour infos en temps réel (météo, actualités, etc.)
+const GROUNDING_TOOL = { googleSearch: {} };
+
 async function getAIResponse(userMessage, history = []) {
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
-    systemInstruction: getSystemPrompt(),
-    generationConfig: {
-      maxOutputTokens: 500,
-      temperature: 0.7,
-    },
-  });
   const geminiHistory = history.slice(-MAX_HISTORY).map((m) => ({
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: m.content }],
   }));
-  const chat = model.startChat({ history: geminiHistory });
-  const result = await chat.sendMessage(userMessage);
-  const response = result.response;
 
-  if (!response || !response.text) return "Désolée, je n'ai pas pu répondre.";
-  return response.text().trim();
+  const contents = [
+    ...geminiHistory,
+    { role: 'user', parts: [{ text: userMessage }] },
+  ];
+
+  const response = await genAI.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents,
+    config: {
+      systemInstruction: getSystemPrompt(),
+      tools: [GROUNDING_TOOL],
+      maxOutputTokens: 500,
+      temperature: 0.7,
+    },
+  });
+
+  const text = response?.text?.();
+  if (!text || !text.trim()) return "Désolée, je n'ai pas pu répondre.";
+  return text.trim();
 }
 
 /** Génère une image via Gemini (Nano Banana) et retourne un Buffer ou null. */
 async function generateImage(prompt) {
   const imagePrompt = (prompt && prompt.trim()) || 'Une scène agréable et colorée.';
   try {
-    const response = await genAIImage.models.generateContent({
+    const response = await genAI.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: imagePrompt,
       config: {

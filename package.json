@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@google/genai": "^1.45.0",
-    "@google/generative-ai": "^0.21.0",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
     "mongoose": "^8.0.3"
