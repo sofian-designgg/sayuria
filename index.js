@@ -57,7 +57,7 @@ Tu peux être un peu fun et bienveillante. Évite les réponses trop longues (Di
 
 async function getAIResponse(userMessage, history = []) {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.5-flash',
     systemInstruction: getSystemPrompt(),
     generationConfig: {
       maxOutputTokens: 500,
